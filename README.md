@@ -1,25 +1,81 @@
-# POMS - Purchase Order Management System
+# Purchase Order Management System (FastAPI)
 
-A full-stack Purchase Order Management System with a FastAPI backend and a vanilla JavaScript frontend.
+A full-stack Purchase Order Management System with:
+- FastAPI backend
+- PostgreSQL database
+- Vanilla JavaScript frontend (served by FastAPI)
 
-## Features
-- JWT login and role-based access (`admin`, `manager`, `viewer`)
-- Vendor CRUD operations
-- Product CRUD operations
-- Purchase order creation with line items
-- Automatic 5% tax calculation
-- Status workflow (`DRAFT`, `PENDING`, `APPROVED`, `REJECTED`, `RECEIVED`, `CANCELLED`)
-- Dashboard metrics
-- Optional AI product description endpoint
+This project is designed to manage vendors, products, and purchase orders with role-based access, stock control, and approval workflow.
+
+## Project Features
+
+### 1. Authentication and Roles
+- JWT login (`/api/auth/login`)
+- Current user endpoint (`/api/auth/me`)
+- Role-based permissions:
+- `admin`, `manager`, `viewer`
+- `manager/admin` required for create/update/delete actions
+
+### 2. Vendor Management
+- Create, read, update vendors
+- Soft delete (deactivate vendor instead of hard delete)
+- Search and pagination support
+- `active_only=true` filter by default in list API
+
+### 3. Product Management
+- Create, read, update products
+- Soft delete (deactivate product)
+- Search by name/SKU and filter by category
+- `active_only=true` filter by default in list API
+
+### 4. Purchase Order Engine
+- Create PO with multiple line items
+- Auto-generate reference number (`PO-YYYYMMDD-XXXX`)
+- Snapshot item prices at PO creation
+- Auto-calculate:
+- subtotal
+- fixed 5% tax
+- grand total
+
+### 5. Approval Workflow and Business Rules
+- PO status lifecycle:
+- `DRAFT -> PENDING -> APPROVED -> RECEIVED`
+- `PENDING -> REJECTED`
+- cancellation rules included
+- Stock deduction on `APPROVED`
+- Stock restore when cancelling an approved PO
+- Prevent delete unless PO is `DRAFT`
+
+### 6. Dashboard Metrics
+- Total PO count
+- Status-wise summary
+- Total PO value
+- Recent purchase orders
+
+### 7. Optional AI Description
+- Endpoint to generate product description (`/api/ai/generate-description`)
+- Uses Anthropic API key if configured
+- Safe fallback template if key is missing/fails
 
 ## Tech Stack
 - Backend: FastAPI, SQLAlchemy, Pydantic, Uvicorn
 - Database: PostgreSQL
-- Frontend: HTML, CSS, JavaScript (no framework)
+- Auth: python-jose (JWT), passlib bcrypt
+- Frontend: HTML, CSS, JavaScript
+
+## API Modules
+- `/api/auth`
+- `/api/vendors`
+- `/api/products`
+- `/api/purchase-orders`
+- `/api/ai`
+
+Interactive API docs are available at `/docs`.
 
 ## Project Structure
+
 ```text
-po-system-enhanced/
+git-ready-copy/
 |-- backend/
 |   |-- core/
 |   |-- db/
@@ -38,23 +94,44 @@ po-system-enhanced/
 |-- README.md
 ```
 
-## Prerequisites
-- Python 3.10+
-- PostgreSQL 15+
+## Local Setup (Windows)
 
-## Setup
-1. Create the database and run schema:
-   - Use `schema_and_seed.sql`
-2. Create and activate virtual environment:
-   - `cd backend`
-   - `python -m venv venv`
-   - `venv\\Scripts\\activate`
-3. Install dependencies:
-   - `pip install -r requirements.txt`
-4. Create `.env` from `.env.example` and update values.
+### 1. Create database
+Create PostgreSQL database:
 
-## Run
-```bat
+```sql
+CREATE DATABASE po_management;
+```
+
+### 2. Import schema and seed data
+
+```powershell
+psql "postgresql://postgres:root@localhost:5432/po_management" -f schema_and_seed.sql
+```
+
+### 3. Install backend dependencies
+
+```powershell
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 4. Configure environment
+Create project-root `.env` (same level as `backend/` and `frontend/`):
+
+```env
+DATABASE_URL=postgresql://postgres:root@localhost:5432/po_management
+JWT_SECRET_KEY=change-this-in-production
+ANTHROPIC_API_KEY=
+APP_ENV=development
+APP_PORT=8000
+```
+
+### 5. Run the application
+
+```powershell
 cd backend
 venv\Scripts\activate
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -62,45 +139,109 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 Open:
 - App: `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
+- Swagger: `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
 
-## Demo Credentials
+## Demo Accounts
 - `admin / admin123`
 - `manager / manager123`
 - `viewer / viewer123`
 
-## Environment Variables
-Create `.env` in project root:
-```env
-DATABASE_URL=postgresql://po_user:po_pass@localhost:5432/po_management
-JWT_SECRET_KEY=change-this-secret
-ANTHROPIC_API_KEY=
-APP_ENV=development
-APP_PORT=8000
+## SQL and Data Notes
+- `schema_and_seed.sql` is idempotent for repeated runs.
+- It enforces `is_active` defaults and repairs old `NULL` active flags.
+- Vendor/Product list endpoints show active records by default.
+
+If data exists in DB but does not show in UI, check `is_active` values:
+
+```sql
+SELECT id, name, is_active FROM vendors;
+SELECT id, name, is_active FROM products;
 ```
 
-## Add Screenshots and Videos in README
-Use this folder structure:
-- `docs/images/` for screenshots
-- `docs/videos/` for GIFs or video files
+## Git Push Workflow
 
-### Screenshot Example
+### Initial push (already done for this repo)
+- Remote: `origin`
+- Branch: `main`
+
+### Push new updates
+
+```powershell
+cd git-ready-copy
+git add .
+git commit -m "Describe your change"
+git push origin main
+```
+
+## Deploy on Render (Make It Live)
+
+This project works well as one Render Web Service + one Render PostgreSQL database.
+
+### Step 1. Push latest code to GitHub
+
+```powershell
+cd git-ready-copy
+git add .
+git commit -m "prepare for render deploy"
+git push origin main
+```
+
+### Step 2. Create PostgreSQL on Render
+1. Open Render Dashboard.
+2. Create `New -> PostgreSQL`.
+3. Choose name, region, and plan.
+4. After creation, copy the **Internal Database URL**.
+
+### Step 3. Create Web Service on Render
+1. Create `New -> Web Service`.
+2. Connect your GitHub repo.
+3. Use these settings:
+- Runtime: `Python 3`
+- Root Directory: leave empty (repo root)
+- Build Command: `pip install -r backend/requirements.txt`
+- Start Command: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
+- Health Check Path: `/health`
+
+### Step 4. Add environment variables
+In Render Web Service -> Environment, set:
+
+```env
+DATABASE_URL=<Render Internal Database URL>
+JWT_SECRET_KEY=<long-random-secret>
+ANTHROPIC_API_KEY=<optional>
+APP_ENV=production
+PYTHON_VERSION=3.11.11
+```
+
+### Step 5. Initialize database schema on Render
+Run once from your local machine using Render's **External Database URL**:
+
+```powershell
+psql "<render-external-database-url>" -f schema_and_seed.sql
+```
+
+### Step 6. Verify deployment
+After deploy:
+- Open `https://<your-service>.onrender.com`
+- Open `https://<your-service>.onrender.com/docs`
+- Test login with demo credentials
+
+## Add Screenshots and Videos
+- Put screenshots in `docs/images/`
+- Put GIF/video files in `docs/videos/`
+
+Examples:
+
 ```md
 ![Dashboard](docs/images/dashboard.png)
+![PO Flow](docs/videos/po-flow.gif)
+[Watch full demo](docs/videos/demo.mp4)
 ```
 
-### GIF Demo Example (recommended for inline preview)
-```md
-![PO Flow Demo](docs/videos/po-flow.gif)
-```
+## Useful Render References
+- Deploy FastAPI quickstart: https://render.com/docs/deploy-fastapi
+- Web services and port behavior: https://render.com/docs/web-services
+- Deploy steps (build/pre-deploy/start): https://render.com/docs/deploys
+- Python version setting: https://render.com/docs/python-version
 
-### Video Link Example
-```md
-[Watch Full Demo Video](docs/videos/demo.mp4)
-```
-
-Note: GitHub reliably renders images/GIFs inline. MP4 files are usually best shared as links.
-
-## Notes for Git Push
-- Keep local-only files out of Git (`venv`, `__pycache__`, `.env`)
-- `.gitignore` is already included for this project
