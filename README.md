@@ -227,6 +227,18 @@ After deploy:
 - Open `https://<your-service>.onrender.com/docs`
 - Test login with demo credentials
 
+## Frontend on Render
+
+You do not need a separate frontend service for this project.
+
+- `frontend/templates/index.html` and `frontend/static/*` are served by FastAPI.
+- Visiting your backend URL (`https://<your-service>.onrender.com`) loads the UI.
+- API calls work automatically because frontend uses same-origin path: `/api`.
+
+If you later deploy frontend separately as a static site, then:
+- change frontend API base URL from `/api` to your backend URL
+- restrict CORS in backend to your frontend domain
+
 ## Add Screenshots and Videos
 - Put screenshots in `docs/images/`
 - Put GIF/video files in `docs/videos/`
@@ -244,4 +256,3 @@ Examples:
 - Web services and port behavior: https://render.com/docs/web-services
 - Deploy steps (build/pre-deploy/start): https://render.com/docs/deploys
 - Python version setting: https://render.com/docs/python-version
-
